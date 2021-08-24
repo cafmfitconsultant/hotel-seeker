@@ -3,48 +3,53 @@
 const chai = require('chai');
 const sinon = require("sinon");
 const expect = chai.expect
-const { Hotel, Tax, SearchFilter } = require('../src/models');
-const { HotelController } = require('../src/controllers');
-const { HotelRepository } = require('../src/repositories');
+const { Hotel, Tax } = require('../src/models');
+const { BookingService } = require('../src/services');
+
 
 const getHotel = (name, rate, taxes) => new Hotel(name, rate, taxes);
 
-const getFlowerParkHotel = () => {
-  const tax1 = Tax.getRegularTax(110);
-  const tax2 = Tax.getRewardProgramTax(80);
-  const tax3 = Tax.getRegularWeekendTax(90);
-  const tax4 = Tax.getRewardProgramWeekendTax(80);
-  const flowersPark = getHotel('Parque das flores', 3, [tax1, tax2, tax3, tax4]);
-  return flowersPark;
-}
-
-const getBotanicGardenHotel = () => {
-  const tax1 = Tax.getRegularTax(160);
-  const tax2 = Tax.getRewardProgramTax(110);
-  const tax3 = Tax.getRegularWeekendTax(60);
-  const tax4 = Tax.getRewardProgramWeekendTax(50);
-  const botanicGarden = getHotel('Jardim Botânico', 4, [tax1, tax2, tax3, tax4]);
-  return botanicGarden;
-}
-
-const getAtlanticOceanHotel = () => {
-  const tax1 = Tax.getRegularTax(220);
-  const tax2 = Tax.getRewardProgramTax(100);
-  const tax3 = Tax.getRegularWeekendTax(150);
-  const tax4 = Tax.getRewardProgramWeekendTax(40);
-  const botanicGarden = getHotel('Mar Atlântico', 5, [tax1, tax2, tax3, tax4]);
-  return botanicGarden;
-}
 
 describe('Hotel scenarios', () => {
   const hotels = []
+  let taxes = [];
+  let bookingService;
   before(() => {
-    const flowersPark = getFlowerParkHotel();
-    const botanicGarden = getBotanicGardenHotel();
-    const atlanticHotel = getAtlanticOceanHotel();
-    hotels.push(flowersPark);
+    bookingService = new BookingService();
+    const botanicGarden = getHotel('Jardim Botânico', 4);
+    
+    const botanicGardenTaxes = [];
+    botanicGardenTaxes.push(Tax.getRegularTax(160));
+    botanicGardenTaxes.push(Tax.getRewardProgramTax(110));
+    botanicGardenTaxes.push(Tax.getRegularWeekendTax(60));
+    botanicGardenTaxes.push(Tax.getRewardProgramWeekendTax(50));
+    botanicGarden.setTaxes(botanicGardenTaxes);
+    botanicGardenTaxes.forEach((t) => t.hotel = botanicGarden);
+
+    const atlanticOcean = getHotel('Mar Atlântico', 5);
+    const atlanticOceanTaxes = [];
+    atlanticOceanTaxes.push(Tax.getRegularTax(220));
+    atlanticOceanTaxes.push(Tax.getRewardProgramTax(100));
+    atlanticOceanTaxes.push(Tax.getRegularWeekendTax(150));
+    atlanticOceanTaxes.push(Tax.getRewardProgramWeekendTax(40));
+    atlanticOcean.setTaxes(atlanticOceanTaxes);
+    atlanticOceanTaxes.forEach((t) => t.hotel = atlanticOcean);
+
+    const flowersPark = getHotel('Parque das flores', 3);
+    const flowersParkTaxes = [];
+    flowersParkTaxes.push(Tax.getRegularTax(110));
+    flowersParkTaxes.push(Tax.getRewardProgramTax(80));
+    flowersParkTaxes.push(Tax.getRegularWeekendTax(90));
+    flowersParkTaxes.push(Tax.getRewardProgramWeekendTax(80));
+    flowersPark.setTaxes(flowersParkTaxes);
+    flowersParkTaxes.forEach((t) => t.hotel = flowersPark);
+    taxes = [...atlanticOceanTaxes,...botanicGardenTaxes,...botanicGardenTaxes];
+    
     hotels.push(botanicGarden);
-    hotels.push(atlanticHotel);
+    hotels.push(atlanticOcean);
+    hotels.push(flowersPark);
+
+    sinon.stub(bookingService, "getHotels").returns(hotels);
   });
 
   after(() => {
@@ -60,23 +65,33 @@ describe('Hotel scenarios', () => {
   });
 
   // test cases
-  it('should have one tax with value 110 and not belongs to a reward program', () => {
-    const [flowersPark] = hotels;
-    const [tax] = flowersPark.taxes;
-    expect(flowersPark.rate).to.equal(3);
-    expect(tax.value).to.equal(110);
-    expect(tax.forRewardsProgram).to.equal(false);
+
+  it('should calculate booking value', () => {
+    const atlanticOcean = hotels.find((t) => t.name === 'Mar Atlântico');
+    const dates = ['26Mar2020', '27Mar2020', '28Mar2020'];
+    const bookingValue = atlanticOcean.calculateBookingByPeriod('reward', dates);
+    expect(bookingValue).to.equal(180);
   })
-  
+
   it('should return cheapest hotel for regular client in the week days', () => {
-    const [flowersPark] = hotels;
-    const hotelRepository = new HotelRepository();
-    const forWeek = hotels.filter((h) => h.taxes.filter((t) => !t.forWeekend && !t.forRewardsProgram));
-    sinon.stub(hotelRepository, "getAllInWeekForRegularClient").returns(forWeek);
-    const hotelController = new HotelController(hotelRepository);
-    const searchFilter = new SearchFilter(false, false);
-    const hotel = hotelController.findCheapestByFilter(searchFilter);
+    const flowersPark = hotels.find((t) => t.name === 'Parque das flores');
+    const dates = ['16Mar2020', '17Mar2020', '18Mar2020'];
+    const hotel = bookingService.getCheapestHotelByBookingPrice('regular', dates);
     expect(hotel).to.equal(flowersPark);
+  })
+
+  it('should return cheapest hotel for regular client in the weekend days', () => {
+    const botanicGarden = hotels.find((t) => t.name === 'Jardim Botânico');
+    const dates = ['20Mar2020', '21Mar2020', '22Mar2020'];
+    const hotel = bookingService.getCheapestHotelByBookingPrice('regular', dates);
+    expect(hotel).to.equal(botanicGarden);
+  })
+
+  it('should return cheapest hotel for rewards program client in the mixed days', () => {
+    const atlanticOcean = hotels.find((t) => t.name === 'Mar Atlântico');
+    const dates = ['26Mar2020', '27Mar2020', '28Mar2020'];
+    const hotel = bookingService.getCheapestHotelByBookingPrice('reward', dates);
+    expect(hotel).to.equal(atlanticOcean);
   })
 });
 

@@ -1,8 +1,13 @@
 class Tax {
+
     constructor(value, forWeekend, forRewardsProgram) {
         this.value = value;
         this.forWeekend = forWeekend;
         this.forRewardsProgram = forRewardsProgram;
+    }
+
+    setHotel(hotel){
+        this.hotel = hotel;
     }
 
     static getRegularTax = (value) => { 
